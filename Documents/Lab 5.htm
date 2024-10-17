@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+    <title>Lab 5: Build the Internet</title>
+    <link rel="stylesheet" type="text/css" href="Lab%205_files/markdown.css">
+</head>
+<body>
+<h1>Lab 5: Build the Internet</h1>
+<ul>
+<li>Lab 5 due <strong>Wednesday, December 7 at noon</strong></li>
+<li><a href="https://web.stanford.edu/class/cs144/cgi-bin/submit/index.php">Submission website</a></li>
+</ul>
+<h2>0. Collaboration Policy</h2>
+<p>You should direct most questions to Piazza, but <strong><em>do not</em></strong> post any source code there. Please make a private post when appropriate.</p>
+<p>You must write all the code you hand in for the programming 
+assignments, except for the code that we give you as part of the 
+assignment and system library code. You are <strong>not allowed</strong>
+ to show your code to anyone else in the class or look at anyone else’s 
+code. You also must not look at solutions from previous years. You may 
+discuss the assignments with other students, but do not copy each 
+others’ code. Please refer to the course administrative handout for more
+ details, and ask questions in Piazza if anything is unclear.</p>
+<h2>1. Introduction</h2>
+<p>At this point you have created several important building blocks of 
+the Internet: in Labs 1 &amp; 2 you built a TCP-compliant transport 
+layer; in Lab 3 you built an Internet router; and in Lab 4 you built a 
+functioning NAT device. In this lab, you are going to put all of these 
+pieces together to build your very own Internet!</p>
+<blockquote>
+<p>This is a short lab and <strong><em>should not</em></strong> take more than 3 hours (if your earlier labs work correctly)! However, that doesn't mean you should start at the last minute!</p>
+</blockquote>
+<h3>Your Task</h3>
+<p>Your task is to port the <code>curl</code> application to work with your Lab 1-4 solutions. You will use <code>curl</code>
+ to access a remote web server on the Internet, using cTCP, with packets
+ passing through your IP router and NAT device. If either your cTCP or 
+NAT doesn't work, don't worry; you can use the reference binaries (with 
+minor point deductions, see Grading for details). However, you should 
+take this opportunity to get your previous labs working.</p>
+<p><img alt="Diagram" src="Lab%205_files/diagram1.png"></p>
+<p>We will provide you with a stripped down version of <code>curl</code> that we call <code>simple_curl</code>, without some of <code>curl</code>’s bells and whistles. You can use <code>simple_curl</code> to download and display webpages:</p>
+<pre><code>./simple_curl www.google.com
+</code></pre>
+<p>In this lab, you will <code>simple_curl</code>, using your cTCP implementation, running over your NAT, in order to communicate with an external grading server.</p>
+<h2>2. Implementation Details</h2>
+<p>After <strong>downloading and recompiling</strong> the new code (see Getting Started), you can run <code>simple_curl</code>
+ on any website, which will package up an ethernet frame containing an 
+IP packet containing a cTCP segment, which will be sent to your 
+NAT/router.</p>
+<p><img alt="Diagram" src="Lab%205_files/diagram2.png"></p>
+<blockquote>
+<p>If your Labs 2 and 4 work, then your implementation should need 0 extra lines of code!</p>
+</blockquote>
+<h3>Memory Leaks</h3>
+<p>We expect you to fix all memory leaks and memory errors in your cTCP 
+implementation. This means a clean valgrind report! We expect a 
+mostly-clean valgrind report for NAT (there will be some memory leaks 
+due to the starter code, such as the NAT init code, routing 
+table/interface setup, the ARP cache, and connection-related data 
+structures).</p>
+<p>To get your valgrind reports, first do the setup as described in <strong>Testing</strong> in the next section, <strong>Getting Started</strong>, except run the following instead of <code>./sr -n</code>:</p>
+<pre><code>sudo valgrind --leak-check=full --show-leak-kinds=all ./sr -n
+</code></pre>
+<p>Then, to get a report for cTCP, do the following in a separate terminal:</p>
+<pre><code>cd ~/lab5/ctcp
+sudo valgrind --leak-check=full --show-leak-kinds=all ./ctcp -c 184.72.104.217:80 -p 11111
+</code></pre>
+<p>Type the following:</p>
+<pre><code>GET /
+Host: 184.72.104.217
+[press enter again]
+[Ctrl + D]
+</code></pre>
+<p>You will get some kind of error message. That's okay! The resulting 
+valgrind report is what you want. Ctrl + C in both terminals to get both
+ valgrind reports.</p>
+<p>Please provide the <strong>ENTIRE</strong> valgrind report in your <code>README</code>! That includes the line numbers and messages of all memory leaks.</p>
+<h2>3. Getting Started</h2>
+<h3>Virtual Machine</h3>
+<p>Your assignment will run on the same VM as Lab 4.</p>
+<h3>Code Setup</h3>
+<p>Make sure you <strong><em>follow these steps exactly and name the folders correctly!</em></strong></p>
+<p>Create a new folder for your Lab 5 code:</p>
+<pre><code>cd ~
+mkdir lab5
+</code></pre>
+<p>Copy over your cTCP implementation (the entire folder):</p>
+<pre><code># for most of you, path/to/ctcp_folder will be ~/lab12
+cp -r path/to/ctcp_folder ~/lab5/ctcp
+</code></pre>
+<p>Copy over your NAT implementation (the entire folder, including the Mininet stuff, the <code>router</code> subfolder, all of it):</p>
+<pre><code># for most of you, path/to/nat_folder will be ~/lab4
+cp -r path/to/nat_folder ~/lab5/nat
+</code></pre>
+<p>The <code>pox</code> folder should be a symlink in the <code>lab5</code> directory:</p>
+<pre><code>ln -s /home/cs144/pox ~/lab5/pox
+</code></pre>
+<p>Then, download the new starter code:</p>
+<pre><code>cd ~/lab5
+wget http://web.stanford.edu/class/cs144/assignments/lab5/lab5_code.tar.gz
+tar -zxvf lab5_code.tar.gz
+</code></pre>
+<p>Download the <code>simple_curl.c</code> file by visiting <a href="https://web.stanford.edu/class/cs144/cgi-bin/submit/lab5-file.php">this page</a>. This should automatically save the file. If not, you can save this webpage as a file called <code>simple_curl.c</code> (make sure to save as "Web Page, HTML only"). Then, copy it to the right directory (or SCP it into the VM):</p>
+<pre><code>cp path/to/simple_curl.c ~/lab5
+</code></pre>
+<p>To verify that you've done this correctly, the following are the new files and changes you should have:</p>
+<ul>
+<li><code>~/lab5/nat/grading_server/</code> folder</li>
+<li><code>~/lab5/nat/router/rtable</code></li>
+<li><code>~/lab5/nat/run_mininet.sh</code> contains <code>sudo python lab5.py</code></li>
+<li><code>~/lab5/nat/lab5.py</code></li>
+<li><code>~/lab5/simple_curl.c</code></li>
+<li><code>~/lab5/Makefile</code></li>
+</ul>
+<h3>Testing</h3>
+<p>In order to set up this lab, you'll need to have several different terminals open. <strong>You should be in <code>sudo</code> for all of them.</strong> To run bash as <code>sudo</code>, do the following:</p>
+<pre><code>sudo bash
+</code></pre>
+<p>And type in the VM password, <code>cs144</code>.</p>
+<p><strong>Terminal 1: Mininet</strong></p>
+<p>Start Mininet:</p>
+<pre><code>cd ~/lab5/nat
+./run_all.sh
+</code></pre>
+<p><strong>Terminal 2: NAT</strong></p>
+<p>Make and run your NAT:</p>
+<pre><code>cd ~/lab5/nat/router
+make clean
+make
+./sr -n
+</code></pre>
+<p><strong>Terminal 3: cTCP and Application</strong></p>
+<p>Make your cTCP implementation:</p>
+<pre><code>cd ~/lab5/ctcp
+make clean
+make
+</code></pre>
+<p>Then make and run <code>simple_curl</code>:</p>
+<pre><code>cd ~/lab5
+make clean
+make
+./simple_curl 184.72.104.217
+</code></pre>
+<p>If it works, you should see the following message:</p>
+<pre><code>Congrats! You've put Lab 5 together!
+
+Enter this token on the submission website: &lt;TOKEN STRING&gt;
+</code></pre>
+<p>Keep track of this <code>&lt;TOKEN STRING&gt;</code>. You will submit this along with your README for your submission. Note that each time you run <code>simple_curl</code>, a different <code>&lt;TOKEN STRING&gt;</code> will appear. You want to submit the latest one. You can confirm that it was submitted correctly by visiting the <a href="https://web.stanford.edu/class/cs144/cgi-bin/submit/status.php">submission status page</a>.</p>
+<h3>Stopping Testing</h3>
+<p>Ctrl + C in all terminals. Run <code>./killall.sh</code> in Terminal 1.</p>
+<h2>4. Grading and Submission</h2>
+<h3>Grading</h3>
+<p>60% of your grade will depend on whether or not you've successfully communicated with the grading server using <code>simple_curl</code>. If the communication is successful, then the <code>&lt;TOKEN STRING&gt;</code> will appear. 40% of the grade will be from your README. Both the README and the latest <code>&lt;TOKEN STRING&gt;</code> must be submitted for a successful submission. You can verify that a success was recorded by visiting the <a href="https://web.stanford.edu/class/cs144/cgi-bin/submit/status.php">submission status page</a>.</p>
+<h3>Reference Binaries</h3>
+<p>Since we want you to complete Lab 5 even if one of your earlier labs 
+didn’t work properly, we will allow you to use either one of our 
+reference binaries for cTCP and NAT (Labs 2 and 4). You may choose to 
+use <strong><em>one</em></strong> of the reference binaries for a 10% deduction in your grade for this lab.</p>
+<h3>README</h3>
+<p>You will submit a <code>README</code> file to your submission. This 
+should not be a very long file with no more than 80 characters per 
+column to make it easier to read. It should contain the following:</p>
+<ul>
+<li><strong>Reference Binary</strong> - Whether or not you used a reference binary, and if so, which one you used.</li>
+<li><strong>Changes</strong> - Describe changes you had to make to your 
+cTCP and/or NAT implementation in order to get this lab to work. If you 
+used a reference binary, then summarize the things that didn't work and 
+the changes you would have needed to get your implementation working. If
+ not changes were required, please state this.</li>
+<li><strong>Valgrind</strong> - Submit a valgrind report for <strong>both</strong> your cTCP and NAT, <strong>even if you used a reference binary</strong>.
+ We expect 0 memory leaks for cTCP and very few for the NAT (note that 
+there will be unavoidable leaks from the router state, such as the 
+routing table). If there are any memory leaks left not due to the 
+starter code, we expect an explanation as to why they were not fixed.</li>
+<li><strong>Understanding Questions</strong> - Answers to the following questions:</li>
+<li>Describe/draw the sequence of packets that <code>simple_curl</code> sends and receives from the grading server. (Hint: use Wireshark!)</li>
+<li>
+<p>The routing table for Lab 5 says:</p>
+<pre><code>  Destination       Gateway           Mask               Interface
+  10.0.1.100        10.0.1.100        255.255.255.255    eth1
+  184.72.104.217    184.72.104.217    255.255.255.255    eth2
+</code></pre>
+<p>Suppose we wish to set <code>184.72.104.217</code> as the default gateway. Write out the new routing table using as few entries as possible.</p>
+</li>
+</ul>
+<h3>Submission</h3>
+<p>Please submit the README and <code>&lt;TOKEN STRING&gt;</code>. Make sure the README is exactly named <code>README</code> or your submission will not go through.</p>
+<h2>5. FAQ</h2>
+<ul>
+<li><strong>Sometimes I get an assertion error when running <code>simple_curl</code>.</strong><br> <code>simple_curl</code>
+ picks a random port to communicate out of. This happens occasionally 
+when the port collides with something already in use. Just run <code>simple_curl</code> again!</li>
+<li><strong>How come when I run <code>./simple_curl.c google.com</code> it doesn't seem to go through my NAT?</strong><br>This is a result of how the Mininet topology is set up. You can get <code>simple_curl</code> working from <code>server1</code> (instead of <code>client</code>)
+ by doing the steps below (thanks James!). Make sure to do this on a 
+fresh VM, as this actually messes with your operating system's IP 
+tables! Super extra credit points if you figure out how to get it 
+working from the <code>client</code> (please let us know if you do)! <strong>Note: You do not need to do this for full points on this lab!</strong></li>
+<li>
+<p>Enable IP forwarding</p>
+<pre><code>sudo echo 1 &gt; /proc/sys/net/ipv4/ip_forward
+</code></pre>
+</li>
+<li>
+<p>Setup a NAT on <code>eth1</code></p>
+<pre><code>sudo /sbin/iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE
+sudo /sbin/iptables -A FORWARD -i client-eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+sudo /sbin/iptables -A FORWARD -i client-eth0 -o eth1 -j ACCEPT
+</code></pre>
+</li>
+<li>
+<p>Recompile <code>sr</code> with <code>eth2</code> as the internal interface (instead of <code>eth1</code>).</p>
+</li>
+<li>Copy the compiled <code>simple_curl</code> from <code>~/lab5/</code> to <code>~/lab5/nat/grading_server</code></li>
+<li>In Mininet, run the following command, where <code>216.58.192.46</code> is the IP address for <code>google.com</code> (DNS does not work)<pre><code>server1 ./simple_curl 216.58.192.46
+</code></pre>
+</li>
+</ul>
+
+
+</body></html>
