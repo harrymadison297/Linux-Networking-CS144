@@ -28,12 +28,12 @@ if [ "$ANSWER" = "Y" -o "$ANSWER" = "y" -o "$ANSWER" = "yes" ]; then
     $PRINTF "Including assignment progress logs in your submission tar.\n"
     cp $CRONLOG $LOGDIR/$LABNAME/
     tar -C $LOGDIR/ -zcf $LOGTAR $LABNAME
-    tar -zcf $TARNAME *.c *.h ctcp_README Makefile $LOGTAR
+    tar -zcf $TARNAME *.c *.h README Makefile $LOGTAR
     rm $LOGTAR
     rm $LOGDIR/$LABNAME/$CRONLOGNAME
 else
     $PRINTF "Excluding assignment progress logs in your submission tar.\n"
-    tar -zcf $TARNAME *.c *.h ctcp_README Makefile
+    tar -zcf $TARNAME *.c *.h README Makefile
 fi 
 
 $PRINTF "Created a tarball of your assignment called $TARNAME.\n"
