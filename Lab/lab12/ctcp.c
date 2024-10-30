@@ -364,4 +364,3 @@ void ctcp_timer()
 {
   /* FIXME */
 }
-ok
