@@ -77,12 +77,8 @@ typedef struct
  */
 static ctcp_state_t *state_list;
 
-uint16_t ctcp_get_num_data_bytes(ctcp_segment_t *ctcp_segment_ptr);
-void ctcp_send_control_segment(ctcp_state_t *state);
-void ctcp_send_segment(ctcp_state_t *state, wrapped_ctcp_segment_t *wrapped_segment);
-void ctcp_clean_up_unacked_segment_list(ctcp_state_t *state);
-void ctcp_send_what_we_can(ctcp_state_t *state);
-char log_ok[4] = "\nOK\n";
+// char log_ok[4] = "\nOK\n";
+// conn_output(state->conn, log_ok, 4);
 
 /* ===================================HELPER======================================== */
 void ctcp_send_control_segment(ctcp_state_t *state)
@@ -100,31 +96,10 @@ void ctcp_send_control_segment(ctcp_state_t *state)
   conn_send(state->conn, &ctcp_segment, sizeof(ctcp_segment_t));
 }
 
-void ctcp_clean_up_unacked_segment_list(ctcp_state_t *state)
+void ctcp_send_unwrapped_segment(ctcp_state_t *state, wrapped_ctcp_segment_t *new_segment_ptr)
 {
-  ll_node_t *front_node_ptr;
-  wrapped_ctcp_segment_t *wrapped_ctcp_segment_ptr;
-  uint32_t seqno_of_last_byte;
-  uint16_t num_data_bytes;
-  while (ll_length(state->tx_state.wrapped_unacked_segments) != 0)
-  {
-    front_node_ptr = ll_front(state->tx_state.wrapped_unacked_segments);
-    wrapped_ctcp_segment_ptr = (wrapped_ctcp_segment_t *)front_node_ptr->object;
-    num_data_bytes = ntohs(wrapped_ctcp_segment_ptr->ctcp_segment.len) - sizeof(ctcp_segment_t);
-    seqno_of_last_byte = ntohl(wrapped_ctcp_segment_ptr->ctcp_segment.seqno) + num_data_bytes - 1;
-
-    if (seqno_of_last_byte < state->tx_state.last_ackno_rxed)
-    {
-      // This segment has been acknowledged.
-      free(wrapped_ctcp_segment_ptr);
-      ll_remove(state->tx_state.wrapped_unacked_segments, front_node_ptr);
-    }
-    else
-    {
-      // This segment has not been acknowledged, so our cleanup is done.
-      return;
-    }
-  }
+  conn_send(state->conn, &new_segment_ptr->ctcp_segment, ntohs(new_segment_ptr->ctcp_segment.len));
+  new_segment_ptr->timestamp_of_last_send = current_time();
 }
 
 /* ===================================CORE======================================== */
@@ -224,7 +199,9 @@ void ctcp_read(ctcp_state_t *state)
     state->tx_state.last_seqno_read += bytes_read;
 
     /* Send cTCP segment to other side */
-    conn_send(state->conn, &new_segment_ptr->ctcp_segment, ntohs(new_segment_ptr->ctcp_segment.len));
+    ctcp_send_unwrapped_segment(state, new_segment_ptr);
+    new_segment_ptr->num_xmits = 1;
+
     if (state->tx_state.last_seqno_sent == 0)
     {
       state->tx_state.last_seqno_sent = bytes_read;
@@ -246,16 +223,17 @@ void ctcp_read(ctcp_state_t *state)
     new_segment_ptr->ctcp_segment.len = htons((uint16_t)sizeof(ctcp_segment_t));
     new_segment_ptr->ctcp_segment.seqno = htonl(state->tx_state.last_seqno_read + 1);
     new_segment_ptr->ctcp_segment.flags |= TH_FIN;
+    new_segment_ptr->ctcp_segment.cksum = 0;
+    new_segment_ptr->ctcp_segment.cksum = cksum(&new_segment_ptr->ctcp_segment, ntohs(new_segment_ptr->ctcp_segment.len));
 
-    conn_send(state->conn, &new_segment_ptr->ctcp_segment, ntohs(new_segment_ptr->ctcp_segment.len));
+    ctcp_send_unwrapped_segment(state, new_segment_ptr);
+    new_segment_ptr->num_xmits = 1;
   }
 }
 
 void ctcp_receive(ctcp_state_t *state, ctcp_segment_t *segment, size_t len)
 {
    uint16_t num_data_bytes;
-// conn_output(state->conn, log_ok, 4);
-
 
   /* If the segment was truncated, ignore it and hopefully retransmission will fix it. */
   if (len < ntohs(segment->len))
@@ -315,7 +293,8 @@ void ctcp_receive(ctcp_state_t *state, ctcp_segment_t *segment, size_t len)
       }
 
       int bytes_read = ntohs(current_wrapped_segment->ctcp_segment.len) - sizeof(ctcp_segment_t);
-      conn_send(state->conn, &current_wrapped_segment->ctcp_segment, ntohs(current_wrapped_segment->ctcp_segment.len));
+      ctcp_send_unwrapped_segment(state, current_wrapped_segment);
+      current_wrapped_segment->num_xmits = 1;
       state->tx_state.last_seqno_sent = current_wrapped_segment->ctcp_segment.seqno - 1 + bytes_read;
       break;
     }
@@ -324,7 +303,6 @@ void ctcp_receive(ctcp_state_t *state, ctcp_segment_t *segment, size_t len)
   }
 }
 
-/* ================================================================================== */
 void ctcp_output(ctcp_state_t *state)
 {
   ll_node_t *front_node_ptr;
@@ -358,37 +336,31 @@ void ctcp_output(ctcp_state_t *state)
   }
 }
 
-/* ================================================================================== */
 void ctcp_timer()
 {
-  /* FIXME */
-  // if (NULL == state_list)
-  //   return;
+  ctcp_state_t * curr_state;
 
-  // ctcp_state_t *curr_state = state_list;
-  // for (curr_state = state_list; curr_state != NULL; curr_state = curr_state->next)
-  // {
-  //   // int rt_timeout = curr_state->ctcp_config.rt_timeout;
-  //   ll_node_t *segment_node = ll_front(curr_state->tx_state.wrapped_unacked_segments);
-  //   if (segment_node == NULL)
-  //     return;
+  if (state_list == NULL) return;
+	for (curr_state = state_list; curr_state != NULL; curr_state = curr_state->next) {
 
-  //   while (true)
-  //   {
-  //     wrapped_ctcp_segment_t *current_wrapped_segment = segment_node->object;
-  //     if (current_wrapped_segment->ctcp_segment.seqno < curr_state->tx_state.last_ackno_rxed)
-  //     {
-  //       free(current_wrapped_segment);
-  //       ll_node_t *delete_node = segment_node;
-  //       segment_node = segment_node->next;
-  //       ll_remove(curr_state->tx_state.wrapped_unacked_segments, delete_node);
-  //       continue;
-  //     }
+    // ctcp_output(curr_state);
 
-  //     int bytes_read = ntohs(current_wrapped_segment->ctcp_segment.len) - sizeof(ctcp_segment_t);
-  //     conn_send(curr_state->conn, &current_wrapped_segment->ctcp_segment, ntohs(current_wrapped_segment->ctcp_segment.len));
-  //     curr_state->tx_state.last_seqno_sent = current_wrapped_segment->ctcp_segment.seqno - 1 + bytes_read;
-  //     break;
-  //   }
-  // }
+    ll_node_t *curr_segment;
+    for ( curr_segment = ll_front(curr_state->tx_state.wrapped_unacked_segments) ; curr_segment != NULL ; curr_segment = curr_segment->next)
+    {
+      if (curr_segment->object == NULL)
+        continue;
+      
+      wrapped_ctcp_segment_t *curr_unwrapped_segment = curr_segment->object;
+      if (current_time() - curr_unwrapped_segment->timestamp_of_last_send >= MAX_SEG_LIFETIME_MS)
+      {
+        if (curr_unwrapped_segment->num_xmits == MAX_NUM_XMITS)
+        {
+          ctcp_destroy(curr_state);
+        }
+        ctcp_send_unwrapped_segment(curr_state, curr_unwrapped_segment);
+        curr_unwrapped_segment->num_xmits += 1;
+      }
+    }
+  }
 }
